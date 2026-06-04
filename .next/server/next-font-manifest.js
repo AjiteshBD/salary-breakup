@@ -1,1 +1,0 @@
-self.__NEXT_FONT_MANIFEST="{\"pages\":{},\"app\":{\"/Users/ktech/Desktop/new/app/layout\":[\"static/media/cb9f64d62d112b41-s.p.woff2\",\"static/media/26d0ba92e140f0dc-s.p.woff2\",\"static/media/bb3ef058b751a6ad-s.p.woff2\"]},\"appUsingSizeAdjust\":true,\"pagesUsingSizeAdjust\":false}"
