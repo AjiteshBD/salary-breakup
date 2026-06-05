@@ -500,9 +500,49 @@ body::before {
 }
 .meta-strip .dot { color: var(--line-strong); }
 
+/* ---------- Table toolbar ---------- */
+.table-toolbar {
+  margin-top: 1.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.toolbar-title {
+  font-family: var(--font-display), serif;
+  font-weight: 540;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--paper-raised);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+}
+.export-btn:hover {
+  background: #7a2d20;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px -10px rgba(138, 51, 36, 0.7);
+}
+.export-btn:active { transform: translateY(0); }
+.export-btn svg { display: block; }
+
 /* ---------- Comparison table ---------- */
 .table-wrap {
-  margin-top: 1.4rem;
+  margin-top: 0.8rem;
   background: var(--paper-raised);
   border: 1px solid var(--line);
   border-radius: var(--radius);

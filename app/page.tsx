@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   computeBreakup, formatINR, formatAnnual, type Period, type ScenarioKey,
 } from "@/lib/salary";
+import { buildCsv } from "@/lib/export";
 import {
   BANDS, COMPONENTS, GROUP_LABELS, bandForCTC,
   type BandKey, type ComponentKey, type Group,
@@ -64,6 +65,23 @@ export default function Home() {
 
   const fmt = (annual: number) => formatINR(annual, period);
   const per = period === "monthly" ? "/mo" : "/yr";
+
+  const exportCsv = () => {
+    const csv = buildCsv(breakup, {
+      pfRatePct,
+      cappedMonthly,
+      generatedOn: new Date().toLocaleString("en-IN"),
+    });
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `salary-breakup-${breakup.bandKey}-${Math.round(ctc)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <main className="shell">
@@ -166,6 +184,16 @@ export default function Home() {
       </section>
 
       {/* Comparison table */}
+      <div className="table-toolbar">
+        <h2 className="toolbar-title">{breakup.bandLabel} · Breakup</h2>
+        <button className="export-btn" onClick={exportCsv}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Export CSV
+        </button>
+      </div>
       <section className="table-wrap" aria-label="Breakup comparison">
         <table className="breakup">
           <thead>
