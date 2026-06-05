@@ -197,6 +197,19 @@ body::before {
   background: var(--paper-raised);
   box-shadow: 0 0 0 3px rgba(138, 51, 36, 0.12);
 }
+.input-wrap .suffix {
+  position: absolute;
+  right: 0.85rem;
+  color: var(--ink-faint);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.95rem;
+  pointer-events: none;
+}
+.input-wrap.pct input {
+  padding-left: 0.85rem;
+  padding-right: 1.9rem;
+}
+
 .field input::-webkit-outer-spin-button,
 .field input::-webkit-inner-spin-button {
   -webkit-appearance: none;

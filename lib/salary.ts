@@ -4,7 +4,7 @@
 
 import {
   BANDS, COMPONENTS, type BandKey, type ComponentKey, type Pct,
-  PF_CAP_ANNUAL, PT_MONTHLY,
+  PF_RATE, PF_CAP_ANNUAL, PT_MONTHLY,
 } from "./policy";
 
 export type ScenarioKey = "withPF" | "capped" | "noPF";
@@ -79,27 +79,49 @@ function buildScenario(
   };
 }
 
+export interface PfOptions {
+  pfRate: number; // fraction, e.g. 0.12
+  cappedMonthly: number; // ₹/month, e.g. 1800
+}
+
+export const DEFAULT_PF: PfOptions = {
+  pfRate: PF_RATE,
+  cappedMonthly: PF_CAP_ANNUAL / 12,
+};
+
 export function computeBreakup(
   annualCtc: number,
   variable: number,
   bandKey: BandKey,
+  pf: PfOptions = DEFAULT_PF,
 ): Breakup {
   const band = BANDS[bandKey];
   const fixed = Math.max(0, annualCtc - variable);
 
-  // With PF — policy "If PF" column.
-  const withAmts = amountsFrom(band.withPF, fixed);
-
-  // Without PF — policy "If No PF" column.
+  // Policy allocations.
+  const policyWith = amountsFrom(band.withPF, fixed);
   const noAmts = amountsFrom(band.noPF, fixed);
 
-  // Capped PF — start from With PF, cap PF at ₹21,600/yr, move the freed
-  // money into LTA so the column still ties to the fixed total.
-  const cappedAmts = { ...withAmts };
-  const cappedPf = Math.min(withAmts.pf, PF_CAP_ANNUAL);
-  const freed = round2(withAmts.pf - cappedPf);
-  cappedAmts.pf = cappedPf;
-  cappedAmts.lta = round2(withAmts.lta + freed);
+  // PF is computed from the (editable) rate against Basic. Bands that carry no
+  // PF in the policy (e.g. Director) stay PF-free. Whatever differs from the
+  // policy's PF allocation is absorbed by LTA so the column still ties to 100%.
+  const hasPf = policyWith.pf > 0;
+  const basicAnnual = policyWith.basic;
+  const policyPf = policyWith.pf;
+  const cap = round2(pf.cappedMonthly * 12);
+
+  const withPfAmount = hasPf ? round2(pf.pfRate * basicAnnual) : 0;
+  const cappedPfAmount = hasPf ? round2(Math.min(pf.pfRate * basicAnnual, cap)) : 0;
+
+  // With PF — policy "If PF" column, PF set from the rate.
+  const withAmts = { ...policyWith };
+  withAmts.pf = withPfAmount;
+  withAmts.lta = round2(policyWith.lta + (policyPf - withPfAmount));
+
+  // Capped PF — same, but PF capped.
+  const cappedAmts = { ...policyWith };
+  cappedAmts.pf = cappedPfAmount;
+  cappedAmts.lta = round2(policyWith.lta + (policyPf - cappedPfAmount));
 
   const byKey: Record<ScenarioKey, Record<ComponentKey, number>> = {
     withPF: withAmts,

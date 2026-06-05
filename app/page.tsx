@@ -25,6 +25,8 @@ const SCEN_ORDER: ScenarioKey[] = ["capped", "withPF", "noPF"];
 export default function Home() {
   const [ctc, setCtc] = useState(3_000_000);
   const [variable, setVariable] = useState(300_000);
+  const [pfRatePct, setPfRatePct] = useState(12);
+  const [cappedMonthly, setCappedMonthly] = useState(1800);
   const [bandChoice, setBandChoice] = useState<BandChoice>("auto");
   const [period, setPeriod] = useState<Period>("monthly");
 
@@ -32,9 +34,20 @@ export default function Home() {
     bandChoice === "auto" ? bandForCTC(ctc) : bandChoice;
 
   const breakup = useMemo(
-    () => computeBreakup(ctc, Math.min(variable, ctc), resolvedBand),
-    [ctc, variable, resolvedBand],
+    () =>
+      computeBreakup(ctc, Math.min(variable, ctc), resolvedBand, {
+        pfRate: pfRatePct / 100,
+        cappedMonthly,
+      }),
+    [ctc, variable, resolvedBand, pfRatePct, cappedMonthly],
   );
+
+  const blurbOf = (k: ScenarioKey) =>
+    k === "capped"
+      ? `PF capped at ₹${cappedMonthly.toLocaleString("en-IN")}/mo`
+      : k === "withPF"
+        ? `PF at ${pfRatePct}% of Basic`
+        : "No provident fund";
 
   // Only show component rows that are non-zero in at least one scenario.
   const visibleByGroup = useMemo(() => {
@@ -66,7 +79,7 @@ export default function Home() {
 
       {/* Inputs */}
       <section className="panel" aria-label="Inputs">
-        <div className="fields fields-2">
+        <div className="fields">
           <div className="field">
             <label htmlFor="ctc">Total Annual CTC</label>
             <div className="input-wrap">
@@ -86,6 +99,28 @@ export default function Home() {
                 id="variable" type="number" min={0} inputMode="numeric"
                 value={variable === 0 ? "" : variable} placeholder="0"
                 onChange={(e) => setVariable(clamp(e.target.value))}
+              />
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="pfRate">PF Rate (on Basic)</label>
+            <div className="input-wrap pct">
+              <input
+                id="pfRate" type="number" min={0} max={100} step={0.01} inputMode="decimal"
+                value={pfRatePct === 0 ? "" : pfRatePct} placeholder="12"
+                onChange={(e) => setPfRatePct(clamp(e.target.value))}
+              />
+              <span className="suffix">%</span>
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="cappedPf">Capped PF (per month)</label>
+            <div className="input-wrap">
+              <span className="rupee">₹</span>
+              <input
+                id="cappedPf" type="number" min={0} inputMode="numeric"
+                value={cappedMonthly === 0 ? "" : cappedMonthly} placeholder="1800"
+                onChange={(e) => setCappedMonthly(clamp(e.target.value))}
               />
             </div>
           </div>
@@ -141,7 +176,7 @@ export default function Home() {
                 return (
                   <th key={k} className={k === "capped" ? "head-scn best" : "head-scn"}>
                     <span className="scn-label">{s.label}</span>
-                    <span className="scn-blurb">{s.blurb}</span>
+                    <span className="scn-blurb">{blurbOf(k)}</span>
                   </th>
                 );
               })}
