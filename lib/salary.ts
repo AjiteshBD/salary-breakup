@@ -1,75 +1,147 @@
-// Salary breakup calculations.
-// All inputs are MONTHLY rupee amounts. Period scaling (monthly/annual)
-// is applied at display time, not here.
+// Salary breakup engine. Given an annual CTC, a variable portion, and a band,
+// it produces three scenarios — With PF, Capped PF, Without PF — each with full
+// per-component amounts and the summary lines used on the payslip.
 
-export const PF_RATE = 0.12; // 12% employee + 12% employer
-export const PF_CAPPED_AMOUNT = 1800; // statutory cap: 12% of ₹15,000
+import {
+  BANDS, COMPONENTS, type BandKey, type ComponentKey, type Pct,
+  PF_CAP_ANNUAL, PT_MONTHLY,
+} from "./policy";
 
-export interface SalaryInput {
-  basic: number;
-  hra: number;
-  special: number;
-  variable: number;
-}
+export type ScenarioKey = "withPF" | "capped" | "noPF";
 
-export interface ModeResult {
-  key: ModeKey;
+export interface ScenarioMeta {
+  key: ScenarioKey;
   label: string;
   blurb: string;
-  employeePf: number;
-  employerPf: number;
-  takeHome: number; // gross - employee PF (pre-tax)
-  ctc: number; // gross + employer PF
 }
 
-export type ModeKey = "capped" | "percent" | "none";
+export const SCENARIOS: ScenarioMeta[] = [
+  { key: "capped", label: "Capped PF", blurb: "PF capped at ₹1,800/mo" },
+  { key: "withPF", label: "With PF", blurb: "PF at 12% of Basic" },
+  { key: "noPF", label: "Without PF", blurb: "No provident fund" },
+];
 
-export function grossOf(input: SalaryInput): number {
-  return input.basic + input.hra + input.special + input.variable;
+export interface Scenario {
+  key: ScenarioKey;
+  label: string;
+  blurb: string;
+  // Annual amount per component (₹).
+  amounts: Record<ComponentKey, number>;
+  grossAnnual: number; // groups A + B
+  employerPfAnnual: number; // group C
+  piAnnual: number; // group D
+  employeePfAnnual: number;
+  ptAnnual: number;
+  ctcAnnual: number; // gross + employer PF (the monthly-CTC basis, ×12)
+  netBeforeTdsAnnual: number; // gross − PT  (matches the source sheet)
 }
 
-export function computeModes(input: SalaryInput): ModeResult[] {
-  const gross = grossOf(input);
-  const pctPf = round(input.basic * PF_RATE);
-
-  return [
-    buildMode("capped", "Capped PF", "Flat ₹1,800 — statutory cap", gross, PF_CAPPED_AMOUNT, PF_CAPPED_AMOUNT),
-    buildMode("percent", "PF on Basic", "12% of Basic salary", gross, pctPf, pctPf),
-    buildMode("none", "Without PF", "No provident fund", gross, 0, 0),
-  ];
+export interface Breakup {
+  bandKey: BandKey;
+  bandLabel: string;
+  fixed: number;
+  variable: number;
+  annualCtc: number;
+  scenarios: Scenario[];
 }
 
-function buildMode(
-  key: ModeKey,
-  label: string,
-  blurb: string,
-  gross: number,
-  employeePf: number,
-  employerPf: number,
-): ModeResult {
+function amountsFrom(p: Pct, fixed: number): Record<ComponentKey, number> {
+  const out = {} as Record<ComponentKey, number>;
+  for (const c of COMPONENTS) out[c.key] = round2(p[c.key] * fixed);
+  return out;
+}
+
+function buildScenario(
+  meta: ScenarioMeta,
+  amounts: Record<ComponentKey, number>,
+): Scenario {
+  let grossAnnual = 0;
+  for (const c of COMPONENTS) {
+    if (c.group === "A" || c.group === "B") grossAnnual += amounts[c.key];
+  }
+  const employerPfAnnual = amounts.pf + amounts.esic;
+  const piAnnual = amounts.pi;
+  const employeePfAnnual = amounts.pf; // mirrors employer contribution
+  const ptAnnual = PT_MONTHLY * 12;
+
   return {
-    key,
-    label,
-    blurb,
-    employeePf,
-    employerPf,
-    takeHome: gross - employeePf,
-    ctc: gross + employerPf,
+    key: meta.key,
+    label: meta.label,
+    blurb: meta.blurb,
+    amounts,
+    grossAnnual: round2(grossAnnual),
+    employerPfAnnual: round2(employerPfAnnual),
+    piAnnual: round2(piAnnual),
+    employeePfAnnual: round2(employeePfAnnual),
+    ptAnnual,
+    ctcAnnual: round2(grossAnnual + employerPfAnnual),
+    netBeforeTdsAnnual: round2(grossAnnual - PT_MONTHLY * 12),
   };
 }
 
-function round(n: number): number {
-  return Math.round(n);
+export function computeBreakup(
+  annualCtc: number,
+  variable: number,
+  bandKey: BandKey,
+): Breakup {
+  const band = BANDS[bandKey];
+  const fixed = Math.max(0, annualCtc - variable);
+
+  // With PF — policy "If PF" column.
+  const withAmts = amountsFrom(band.withPF, fixed);
+
+  // Without PF — policy "If No PF" column.
+  const noAmts = amountsFrom(band.noPF, fixed);
+
+  // Capped PF — start from With PF, cap PF at ₹21,600/yr, move the freed
+  // money into LTA so the column still ties to the fixed total.
+  const cappedAmts = { ...withAmts };
+  const cappedPf = Math.min(withAmts.pf, PF_CAP_ANNUAL);
+  const freed = round2(withAmts.pf - cappedPf);
+  cappedAmts.pf = cappedPf;
+  cappedAmts.lta = round2(withAmts.lta + freed);
+
+  const byKey: Record<ScenarioKey, Record<ComponentKey, number>> = {
+    withPF: withAmts,
+    capped: cappedAmts,
+    noPF: noAmts,
+  };
+
+  return {
+    bandKey,
+    bandLabel: band.label,
+    fixed,
+    variable,
+    annualCtc,
+    scenarios: SCENARIOS.map((m) => buildScenario(m, byKey[m.key])),
+  };
 }
 
-const inr = new Intl.NumberFormat("en-IN", {
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+const inrWhole = new Intl.NumberFormat("en-IN", {
   style: "currency",
   currency: "INR",
   maximumFractionDigits: 0,
 });
 
-// Format a monthly figure, scaling to annual when requested.
-export function formatINR(monthly: number, period: "monthly" | "annual"): string {
-  const value = period === "annual" ? monthly * 12 : monthly;
-  return inr.format(value);
+const inrPaise = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+export type Period = "monthly" | "annual";
+
+// Format an annual figure, scaling to monthly when requested.
+export function formatINR(annual: number, period: Period): string {
+  const v = period === "monthly" ? annual / 12 : annual;
+  return Number.isInteger(v) ? inrWhole.format(v) : inrPaise.format(v);
+}
+
+export function formatAnnual(v: number): string {
+  return Number.isInteger(v) ? inrWhole.format(v) : inrPaise.format(v);
 }
